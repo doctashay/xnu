@@ -92,6 +92,29 @@ int wcte = 0;				/* Non-cache gather timer disabled */
 
 int debug_task;
 
+static void
+ppc_init_backoff_state(void)
+{
+	__asm__ volatile(
+		"lis r9,0\n\t"
+		"lis r10,0x00ff\n\t"
+		"ori r10,r10,0xffff\n\t"
+		"li r11,-1\n\t"
+		"li r12,0\n\t"
+		"stw r10,0x5408(r9)\n\t"
+		"stw r11,0x540c(r9)\n\t"
+		"stw r11,0x5430(r9)\n\t"
+		"stw r11,0x5434(r9)\n\t"
+		"stw r11,0x5428(r9)\n\t"
+		"stw r11,0x542c(r9)\n\t"
+		"stw r12,0x5400(r9)\n\t"
+		"stw r11,0x5410(r9)\n\t"
+		"stw r11,0x5414(r9)\n\t"
+		"stw r12,0x5404(r9)\n\t"
+		"stw r12,0x5438(r9)\n\t"
+		: : : "r9", "r10", "r11", "r12", "memory");
+}
+
 patch_entry_t patch_table[] = {
 	{&extPatch32,			0x60000000, PATCH_FEATURE,		PatchExt32},
 	{&extPatchMCK,			0x60000000, PATCH_PROCESSOR,	CPU_SUBTYPE_POWERPC_970},
@@ -163,21 +186,24 @@ ppc_init(
 	BootProcInfo.pending_ast = AST_NONE;
 	BootProcInfo.FPU_owner = NULL;
 	BootProcInfo.VMX_owner = NULL;
+	BootProcInfo.pp2ndPage = (addr64_t)(uintptr_t)&BootProcInfo;	/* Initial physical address of the second page */
+	
+	mp = (mapping_t *)BootProcInfo.ppUMWmp;
+	mp->mpFlags = 0x01000000 | mpLinkage | mpPerm | 1;
+	mp->mpSpace = invalSpace;
+
 	BootProcInfo.pp_cbfr = console_per_proc_alloc(TRUE);
+	ppc_init_backoff_state();
+
 	BootProcInfo.rtcPop = EndOfAllTime;
 	queue_init(&BootProcInfo.rtclock_timer.queue);
 	BootProcInfo.rtclock_timer.deadline = EndOfAllTime;
-	BootProcInfo.pp2ndPage = (addr64_t)(uintptr_t)&BootProcInfo;	/* Initial physical address of the second page */
 
  	BootProcInfo.pms.pmsStamp = 0;						/* Dummy transition time */
  	BootProcInfo.pms.pmsPop = EndOfAllTime;				/* Set the pop way into the future */
  	
  	BootProcInfo.pms.pmsState = pmsParked;				/* Park the power stepper */
 	BootProcInfo.pms.pmsCSetCmd = pmsCInit;				/* Set dummy initial hardware state */
-	
-	mp = (mapping_t *)BootProcInfo.ppUMWmp;
-	mp->mpFlags = 0x01000000 | mpLinkage | mpPerm | 1;
-	mp->mpSpace = invalSpace;
 
 	pmsInit();											/* Initialize the stepper */
 
@@ -200,7 +226,7 @@ ppc_init(
 				PROCESSOR_DATA(master_processor, thread_timer) = &thread->system_timer;
 
 	static_memory_end = round_page(args->topOfKernelData);;
-      
+
 	PE_init_platform(FALSE, args);						/* Get platform expert set up */
 
 	if (!PE_parse_boot_argn("novmx", &novmx, sizeof (novmx))) novmx=0;	/* Special run without VMX? */
@@ -257,7 +283,6 @@ ppc_init(
 	ppc_vm_init(xmaxmem, args);
 	
 	if(BootProcInfo.pf.Available & pf64Bit) {			/* Are we on a 64-bit machine */
-		
 		if(!wcte) {
 			(void)ml_scom_read(GUSModeReg << 8, &scdata);	/* Get GUS mode register */
 			scdata = scdata | GUSMstgttoff;					/* Disable the NCU store gather timer */
@@ -274,7 +299,7 @@ ppc_init(
 			}
 		}
 	}
-		
+
 	machine_startup();
 }
 

@@ -43,5 +43,6 @@
 #define PROCESSOR_VERSION_7447A		0x8003	/* ? */
 #define PROCESSOR_VERSION_970		0x0039	/* ? */
 #define PROCESSOR_VERSION_970FX		0x003C	/* ? */
+#define PROCESSOR_VERSION_970MP		0x0044	/* ? */
 
 #endif /* _PPC_SPEC_REG_H_ */

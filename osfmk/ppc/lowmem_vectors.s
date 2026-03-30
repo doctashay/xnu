@@ -3930,22 +3930,40 @@ EXT(killresv):
 			.long	0								; 53F4 reserved			
 			.long	0								; 53F8 reserved			
 			.long	0								; 53FC reserved	
-			.long	0								; 5400 reserved
-			.long	0								; 5404 reserved
-			.long	0								; 5408 reserved
+			.globl	EXT(boffGo)
+LEXT(boffGo)
+			.long	0								; 5400 G5 backoff hook
+			.globl	EXT(boffOn)
+LEXT(boffOn)
+			.long	0								; 5404 G5 backoff enable
+			.globl	EXT(boffSync)
+LEXT(boffSync)
+			.long	0								; 5408 G5 backoff sync state
 			.long	0								; 540C reserved
-			.long	0								; 5410 reserved
+			.globl	EXT(boffStim)
+LEXT(boffStim)
+			.long	0								; 5410 G5 backoff timer stimulus
 			.long	0								; 5414 reserved
-			.long	0								; 5418 reserved
+			.globl	EXT(boffDur)
+LEXT(boffDur)
+			.long	0								; 5418 G5 backoff duration
 			.long	0								; 541C reserved
-			.long	0								; 5420 reserved			
-			.long	0								; 5424 reserved			
-			.long	0								; 5428 reserved			
-			.long	0								; 542C reserved			
-			.long	0								; 5430 reserved			
-			.long	0								; 5434 reserved			
-			.long	0								; 5438 reserved			
-			.long	0								; 543C reserved			
+			.globl	EXT(boffFuzz)
+LEXT(boffFuzz)
+			.long	0								; 5420 G5 backoff jitter
+			.long	0								; 5424 reserved
+			.globl	EXT(boffIntrq)
+LEXT(boffIntrq)
+			.long	0								; 5428 G5 backoff interrupt request
+			.long	0								; 542C reserved
+			.globl	EXT(boffSEarly)
+LEXT(boffSEarly)
+			.long	0								; 5430 G5 early-backoff state
+			.long	0								; 5434 reserved
+			.globl	EXT(boffSCnt)
+LEXT(boffSCnt)
+			.long	0								; 5438 G5 backoff sync counter
+			.long	0								; 543C reserved
 			.long	0								; 5440 reserved			
 			.long	0								; 5444 reserved			
 			.long	0								; 5448 reserved			

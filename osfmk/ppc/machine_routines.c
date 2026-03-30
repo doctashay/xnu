@@ -44,6 +44,8 @@
 #include <kern/kern_types.h>
 #include <kern/processor.h>
 #include <kern/machine.h>
+#include <kern/etimer.h>
+#include <kern/sched_prim.h>
 
 #include <vm/vm_page.h>
 
@@ -61,6 +63,23 @@ uint32_t warFlags = 0;
 
 decl_simple_lock_data(, spsLock);
 unsigned int spsLockInit = 0;
+extern unsigned int boffSCnt;
+int boffLock = 0;
+int boffLockInit = 0;
+int boffSettingsInit = 0;
+uint64_t dboffDur = 0x0000000000001F40ULL;
+uint64_t dboffFuzz = 0x00000000000003E8ULL;
+uint64_t dboffSync = 0x000000000001ADB0ULL;
+unsigned int memdSync = 0;
+unsigned int powertunesel[4] = { 0 };
+int svboffGo = 0;
+int svboffOn = 0;
+int svboffStim = 0;
+int svboffSync = 0;
+unsigned char sysInfo[0x58] = { 0 };
+
+void ml_mem_backoff(void);
+void ml_mem_backoff_xfunc(void);
 
 extern unsigned int hwllckPatch_isync;
 extern unsigned int hwulckPatch_isync;
@@ -716,7 +735,6 @@ ml_set_processor_speed(unsigned long speed)
 			break;
 			
 		case pmPowerTune:
-	
 			ml_set_processor_speed_powertune(speed);
 			break;
 			
@@ -813,6 +831,15 @@ void ml_mem_backoff(void) {
 	__asm__ volatile("isync");
 	
 	return;
+}
+
+void
+ml_mem_backoff_xfunc(void)
+{
+	(void)hw_atomic_add((unsigned int *)&boffSCnt, 1);
+	etimer_resync_deadlines();
+	if (hw_atomic_sub(&memdSync, 1) == 0)
+		thread_wakeup_prim((event_t)&memdSync, FALSE, THREAD_AWAKENED);
 }
 
 

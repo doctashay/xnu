@@ -777,11 +777,15 @@ init7450done:
 
 init970:
 			lis		r20,8								; Set up for 512K L2
+			b		init970x
+init970MP:
+			lis		r20,16								; Set up for 1MB L2
 init970x:
 			li		r0,0								; Clear this
 			mtspr	hior,r0								; Make sure that 0 is interrupt prefix
 			bf		firstBoot,init970nb					; No init for wakeup or second processor....
 
+			oris	r17,r17,0x2000						; Set pfAvJava — Altivec Java mode supported (stock 0x998b8)
 
 ;
 ;			We can not query or change the L2 size.  We will just
@@ -1253,6 +1257,25 @@ processor_types:
 			.long	pmPowerTune
 			.long	PatchLwsync
 			.long	init970
+			.long	CPU_SUBTYPE_POWERPC_970
+			.long	128
+			.long	64*1024
+			.long	32*1024
+			.long	128
+			.long	65
+			.long	42
+
+;	970MP
+
+			.align	2
+			.long	0xFFFF0000		; All versions so far
+			.short	PROCESSOR_VERSION_970MP
+			.short	0
+			.long	pfFloat | pfAltivec | pfSMPcap | pfCanSleep | pfCanNap | pf128Byte | pf64Bit | pfL2
+			.long   kHasAltivec | k64Bit | kCache128 | kDataStreamsAvailable | kDcbtStreamsRecommended | kDcbtStreamsAvailable | kHasGraphicsOps | kHasStfiwx | kHasFsqrt
+			.long	pmPowerTune
+			.long	PatchLwsync
+			.long	init970MP
 			.long	CPU_SUBTYPE_POWERPC_970
 			.long	128
 			.long	64*1024

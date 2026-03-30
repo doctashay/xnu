@@ -32,6 +32,7 @@
 #include <mach/time_value.h>
 #include <pexpert/protos.h>
 #include <pexpert/pexpert.h>
+#include <pexpert/ppc/protos.h>
 #include <pexpert/ppc/interrupts.h>
 #include <pexpert/device_tree.h>
 #include <pexpert/pe_images.h>
@@ -45,6 +46,20 @@ void pe_identify_machine(void);
 
 /* private globals */
 PE_state_t PE_state;
+
+typedef struct {
+	char		model[32];
+	vm_offset_t	north_vaddr;
+	uint32_t	north_id;
+	vm_offset_t	south_vaddr;
+	uint32_t	south_id;
+	DTEntry		cpu_entry;
+	uint32_t	*power_mode_data;
+	uint32_t	power_mode_shadow[2];
+	uint32_t	uni_n_shadow[8];
+} pe_ppc_platform_state_t;
+
+static pe_ppc_platform_state_t gPEPPCPlatformState;
 
 /* Clock Frequency Info */
 clock_frequency_info_t gPEClockFrequencyInfo;
@@ -154,6 +169,8 @@ void PE_init_platform(boolean_t vm_initialized, void *_args)
 	unsigned int msize, size;
 	uint32_t *south, *north, *pdata, *ddata;
 	int i;
+	volatile uint32_t *mapped_north;
+	volatile uint32_t *mapped_south;
 	
 	boot_args *args = (boot_args *)_args;
 
@@ -187,7 +204,81 @@ void PE_init_platform(boolean_t vm_initialized, void *_args)
 	else
 	{
 	    pe_init_debug();
-	
+
+	    if (kSuccess != DTLookupEntry(NULL, "/", &root))
+		return;
+
+	    if (kSuccess != DTGetProperty(root, "model", (void **)&model, &msize))
+		return;
+
+	    if (msize >= sizeof(gPEPPCPlatformState.model))
+		msize = sizeof(gPEPPCPlatformState.model) - 1;
+
+	    bcopy(model, gPEPPCPlatformState.model, msize);
+	    gPEPPCPlatformState.model[msize] = '\0';
+
+	    if (kSuccess == DTFindEntry("name", "u3", &dnorth))
+	    {
+		if (kSuccess != DTGetProperty(dnorth, "reg", (void **)&north, &size))
+		    return;
+
+		mapped_north = (volatile uint32_t *)io_map_spec(north[1], 0x1000, VM_WIMG_IO);
+		gPEPPCPlatformState.north_vaddr = (vm_offset_t)mapped_north;
+		gPEPPCPlatformState.north_id = mapped_north[0];
+
+		if (kSuccess != DTFindEntry("name", "mac-io", &dsouth))
+		    return;
+
+		if (kSuccess != DTGetProperty(dsouth, "ranges", (void **)&south, &size))
+		    return;
+
+		mapped_south = (volatile uint32_t *)io_map_spec(south[3], 0x1000, VM_WIMG_IO);
+		gPEPPCPlatformState.south_vaddr = (vm_offset_t)mapped_south;
+		gPEPPCPlatformState.south_id = mapped_south[0];
+
+		if (kSuccess != DTFindEntry("name", "cpu", &dcpu))
+		    return;
+
+		gPEPPCPlatformState.cpu_entry = dcpu;
+
+		if (kSuccess != DTGetProperty(dcpu, "power-mode-data", (void **)&pdata, &size))
+		    return;
+
+		gPEPPCPlatformState.power_mode_data = pdata;
+		gPEPPCPlatformState.power_mode_shadow[0] = pdata[0];
+		gPEPPCPlatformState.power_mode_shadow[1] = pdata[1];
+		return;
+	    }
+
+	    if (kSuccess != DTFindEntry("name", "uni-n", &dnorth))
+		return;
+
+	    if (kSuccess != DTGetProperty(dnorth, "reg", (void **)&north, &size))
+		return;
+
+	    mapped_north = (volatile uint32_t *)io_map_spec(north[0], 0x1000, VM_WIMG_IO);
+	    gPEPPCPlatformState.north_vaddr = (vm_offset_t)mapped_north;
+	    gPEPPCPlatformState.north_id = mapped_north[0];
+
+	    if (kSuccess != DTFindEntry("device_type", "mac-io", &dsouth))
+		return;
+
+	    if (kSuccess != DTGetProperty(dsouth, "ranges", (void **)&south, &size))
+		return;
+
+	    mapped_south = (volatile uint32_t *)io_map_spec(south[3], 0x1000, VM_WIMG_IO);
+	    gPEPPCPlatformState.south_vaddr = (vm_offset_t)mapped_south;
+	    gPEPPCPlatformState.south_id = mapped_south[0];
+
+	    for (i = 0; i < 8; i++)
+		gPEPPCPlatformState.uni_n_shadow[i] = mapped_north[(0x30 / sizeof(uint32_t)) + i];
+
+	    if (gPEPPCPlatformState.north_id == 0xD2)
+	    {
+		eieio();
+		mapped_north[0x38 / sizeof(uint32_t)] |= 0x70000000;
+		eieio();
+	    }
 	}
 }
 

@@ -37,9 +37,137 @@
 #include <ppc/savearea.h>
 #include <ppc/Diagnostics.h>
 #include <kern/processor.h>
+#include <string.h>
 
 
 static void pmsCPURemote(uint32_t nstep);
+static void pmsSetPowerBook(uint32_t sel, uint32_t cpu, uint32_t platformData);
+static uint32_t pmsQueryPowerBook(uint32_t cpu, uint32_t platformData);
+static void pmsSetM23(uint32_t sel, uint32_t cpu, uint32_t platformData);
+static uint32_t pmsQueryM23(uint32_t cpu, uint32_t platformData);
+
+extern unsigned char sysInfo[0x58];
+
+#define SYSINFO_U32(offset) (*(uint32_t *)(void *)(sysInfo + (offset)))
+
+pmsDef hwM23Step[] = {
+	{ .pmsLimit = century, .pmsStepID = 0x0, .pmsSetCmd = 0x00810000, .sf.pmsSetFuncInd = 0x1, .pmsDown = 0x0, .pmsNext = 0x1, .pmsTDelay = 0x0 },
+	{ .pmsLimit = 0x1388, .pmsStepID = 0x1, .pmsSetCmd = 0x00000001, .sf.pmsSetFuncInd = 0x1, .pmsDown = 0x0, .pmsNext = 0x2, .pmsTDelay = 0x0 },
+	{ .pmsLimit = century, .pmsStepID = 0x2, .pmsSetCmd = 0x00800003, .sf.pmsSetFuncInd = 0x1, .pmsDown = 0x0, .pmsNext = 0x2, .pmsTDelay = 0x0 },
+	{ .pmsLimit = 0x03E8, .pmsStepID = 0x3, .pmsSetCmd = 0x00800004, .sf.pmsSetFuncInd = 0x1, .pmsDown = 0x0, .pmsNext = 0x2, .pmsTDelay = 0x0 },
+	{ .pmsLimit = century, .pmsStepID = 0x4, .pmsSetCmd = 0x00810006, .sf.pmsSetFuncInd = 0x1, .pmsDown = 0x4, .pmsNext = 0x4, .pmsTDelay = 0x0 },
+	{ .pmsLimit = century, .pmsStepID = 0x5, .pmsSetCmd = 0x00800007, .sf.pmsSetFuncInd = 0x1, .pmsDown = 0x5, .pmsNext = 0x5, .pmsTDelay = 0x0 },
+	{ .pmsLimit = 0x0, .pmsStepID = 0x6, .pmsSetCmd = 0x00C00007, .sf.pmsSetFuncInd = 0x1, .pmsDown = 0xFFFFFFFFU, .pmsNext = 0xFFFFFFFFU, .pmsTDelay = 0x0 },
+	{ .pmsLimit = 0x0, .pmsStepID = 0x7, .pmsSetCmd = 0x00C00007, .sf.pmsSetFuncInd = 0x1, .pmsDown = 0xFFFFFFFFU, .pmsNext = 0xFFFFFFFFU, .pmsTDelay = 0x0 },
+	{ .pmsLimit = century, .pmsStepID = 0x8, .pmsSetCmd = 0x00810006, .sf.pmsSetFuncInd = 0x1, .pmsDown = 0x8, .pmsNext = 0x8, .pmsTDelay = 0x0 },
+	{ .pmsLimit = 0x0, .pmsStepID = 0x9, .pmsSetCmd = 0x00810000, .sf.pmsSetFuncInd = 0x1, .pmsDown = 0x0, .pmsNext = 0x1, .pmsTDelay = 0x0 },
+};
+
+pmsDef hwpmsStep[] = {
+	{ .pmsLimit = 0x0, .pmsStepID = 0x0, .pmsSetCmd = 0x81400000, .sf.pmsSetFuncInd = 0x1, .pmsDown = 0x15, .pmsNext = 0x15, .pmsTDelay = 0x0 },
+	{ .pmsLimit = 0x11F8, .pmsStepID = 0x1, .pmsSetCmd = 0x00000001, .sf.pmsSetFuncInd = 0x1, .pmsDown = 0x0, .pmsNext = 0x0A, .pmsTDelay = 0x0 },
+	{ .pmsLimit = century, .pmsStepID = 0x2, .pmsSetCmd = 0x00800003, .sf.pmsSetFuncInd = 0x1, .pmsDown = 0x1A, .pmsNext = 0x2, .pmsTDelay = 0x0 },
+	{ .pmsLimit = 0x03E8, .pmsStepID = 0x3, .pmsSetCmd = 0x00800004, .sf.pmsSetFuncInd = 0x1, .pmsDown = 0x0, .pmsNext = 0x2, .pmsTDelay = 0x0 },
+	{ .pmsLimit = century, .pmsStepID = 0x4, .pmsSetCmd = 0x00818006, .sf.pmsSetFuncInd = 0x1, .pmsDown = 0x4, .pmsNext = 0x4, .pmsTDelay = 0x0 },
+	{ .pmsLimit = 0x0190, .pmsStepID = 0x5, .pmsSetCmd = 0x408107, .sf.pmsSetFuncInd = 0x1, .pmsDown = 0x0D, .pmsNext = 0x0D, .pmsTDelay = 0x0 },
+	{ .pmsLimit = 0x0, .pmsStepID = 0x6, .pmsSetCmd = 0x408107, .sf.pmsSetFuncInd = 0x1, .pmsDown = 0x0E, .pmsNext = 0x0E, .pmsTDelay = 0x0 },
+	{ .pmsLimit = 0x0, .pmsStepID = 0x7, .pmsSetCmd = 0x408107, .sf.pmsSetFuncInd = 0x1, .pmsDown = 0x0F, .pmsNext = 0x0F, .pmsTDelay = 0x0 },
+	{ .pmsLimit = 0x11F8, .pmsStepID = 0x8, .pmsSetCmd = 0x00828000, .sf.pmsSetFuncInd = 0x1, .pmsDown = 0x10, .pmsNext = 0x13, .pmsTDelay = 0x0 },
+	{ .pmsLimit = 0x0, .pmsStepID = 0x9, .pmsSetCmd = 0x81400000, .sf.pmsSetFuncInd = 0x1, .pmsDown = 0x16, .pmsNext = 0x16, .pmsTDelay = 0x0 },
+	{ .pmsLimit = 0x0190, .pmsStepID = 0x0A, .pmsSetCmd = 0x00008102, .sf.pmsSetFuncInd = 0x1, .pmsDown = 0x17, .pmsNext = 0x0B, .pmsTDelay = 0x0 },
+	{ .pmsLimit = 0x2580, .pmsStepID = 0x0B, .pmsSetCmd = 0x80810002, .sf.pmsSetFuncInd = 0x1, .pmsDown = 0x18, .pmsNext = 0x0C, .pmsTDelay = 0x0 },
+	{ .pmsLimit = 0x0190, .pmsStepID = 0x0C, .pmsSetCmd = 0x00008102, .sf.pmsSetFuncInd = 0x1, .pmsDown = 0x19, .pmsNext = 0x02, .pmsTDelay = 0x0 },
+	{ .pmsLimit = century, .pmsStepID = 0x0D, .pmsSetCmd = 0x80800007, .sf.pmsSetFuncInd = 0x1, .pmsDown = 0x0D, .pmsNext = 0x0D, .pmsTDelay = 0x0 },
+	{ .pmsLimit = 0x0, .pmsStepID = 0x0E, .pmsSetCmd = 0x80C00007, .sf.pmsSetFuncInd = 0x0, .pmsDown = 0xFFFFFFFFU, .pmsNext = 0xFFFFFFFFU, .pmsTDelay = 0x0 },
+	{ .pmsLimit = 0x0, .pmsStepID = 0x0F, .pmsSetCmd = 0x80C00007, .sf.pmsSetFuncInd = 0x0, .pmsDown = 0xFFFFFFFFU, .pmsNext = 0xFFFFFFFFU, .pmsTDelay = 0x0 },
+	{ .pmsLimit = 0x0, .pmsStepID = 0x10, .pmsSetCmd = 0x81400000, .sf.pmsSetFuncInd = 0x1, .pmsDown = 0x11, .pmsNext = 0x11, .pmsTDelay = 0x0 },
+	{ .pmsLimit = century, .pmsStepID = 0x11, .pmsSetCmd = 0x00828000, .sf.pmsSetFuncInd = 0x1, .pmsDown = 0x11, .pmsNext = 0x12, .pmsTDelay = 0x0 },
+	{ .pmsLimit = 0x11F8, .pmsStepID = 0x12, .pmsSetCmd = 0x00000001, .sf.pmsSetFuncInd = 0x1, .pmsDown = 0x11, .pmsNext = 0x13, .pmsTDelay = 0x0 },
+	{ .pmsLimit = 0x0190, .pmsStepID = 0x13, .pmsSetCmd = 0x00008102, .sf.pmsSetFuncInd = 0x1, .pmsDown = 0x11, .pmsNext = 0x14, .pmsTDelay = 0x0 },
+	{ .pmsLimit = century, .pmsStepID = 0x14, .pmsSetCmd = 0x80810003, .sf.pmsSetFuncInd = 0x1, .pmsDown = 0x10, .pmsNext = 0x14, .pmsTDelay = 0x0 },
+	{ .pmsLimit = century, .pmsStepID = 0x15, .pmsSetCmd = 0x00828000, .sf.pmsSetFuncInd = 0x1, .pmsDown = 0x0, .pmsNext = 0x1, .pmsTDelay = 0x0 },
+	{ .pmsLimit = 0x11F8, .pmsStepID = 0x16, .pmsSetCmd = 0x00828000, .sf.pmsSetFuncInd = 0x1, .pmsDown = 0x0, .pmsNext = 0x0A, .pmsTDelay = 0x0 },
+	{ .pmsLimit = 0x01F4, .pmsStepID = 0x17, .pmsSetCmd = pmsDelay, .sf.pmsSetFuncInd = 0x0, .pmsDown = 0x0, .pmsNext = 0x0A, .pmsTDelay = 0x0 },
+	{ .pmsLimit = 0x01F4, .pmsStepID = 0x18, .pmsSetCmd = pmsDelay, .sf.pmsSetFuncInd = 0x0, .pmsDown = 0x0, .pmsNext = 0x0B, .pmsTDelay = 0x0 },
+	{ .pmsLimit = 0x01F4, .pmsStepID = 0x19, .pmsSetCmd = pmsDelay, .sf.pmsSetFuncInd = 0x0, .pmsDown = 0x0, .pmsNext = 0x0C, .pmsTDelay = 0x0 },
+	{ .pmsLimit = 0x01F4, .pmsStepID = 0x1A, .pmsSetCmd = pmsDelay, .sf.pmsSetFuncInd = 0x0, .pmsDown = 0x0, .pmsNext = 0x02, .pmsTDelay = 0x0 },
+};
+
+static uint32_t pmsM23State;
+
+static void
+pmsSetPowerBook(uint32_t sel, uint32_t cpu, uint32_t platformData)
+{
+	volatile uint32_t *pb_ctrl;
+	volatile uint8_t *pb_regs;
+	uint32_t lo;
+
+	(void)cpu;
+	(void)platformData;
+
+	if ((int32_t)sel < 0) {
+		pb_ctrl = (volatile uint32_t *)(uintptr_t)SYSINFO_U32(0x24);
+		if (pb_ctrl != NULL) {
+			pb_ctrl[0x100 / sizeof(*pb_ctrl)] = ((sel << 8) & 0x7F);
+			__asm__ volatile("eieio");
+		}
+	}
+
+	pb_regs = (volatile uint8_t *)(uintptr_t)SYSINFO_U32(0x2C);
+	if (pb_regs == NULL) {
+		return;
+	}
+
+	if (sel & 0x00008000U) {
+		pb_regs[0x6B] = (uint8_t)((((sel >> 8) & 1U)) | 4U);
+		__asm__ volatile("eieio");
+	}
+
+	lo = sel & 0xFFU;
+	pb_regs[0x63] = (uint8_t)((((lo >> 1) & 1U)) | 4U);
+	pb_regs[0x64] = (uint8_t)(((lo & 1U)) | 4U);
+	pb_regs[0x65] = (uint8_t)(((sel & 1U)) | 4U);
+	__asm__ volatile("eieio");
+}
+
+static uint32_t
+pmsQueryPowerBook(uint32_t cpu, uint32_t platformData)
+{
+	volatile uint8_t *pb_regs;
+	uint32_t bit0;
+	uint32_t result;
+
+	(void)cpu;
+	(void)platformData;
+
+	pb_regs = (volatile uint8_t *)(uintptr_t)SYSINFO_U32(0x2C);
+	if (pb_regs == NULL) {
+		return 0;
+	}
+
+	bit0 = pb_regs[0x64] & 1U;
+	result = ((pb_regs[0x63] & 1U) << 2);
+	result |= (bit0 << 1);
+	result |= bit0;
+	result |= ((pb_regs[0x6B] & 1U) << 8);
+	return result;
+}
+
+static void
+pmsSetM23(uint32_t sel, uint32_t cpu, uint32_t platformData)
+{
+	(void)cpu;
+	(void)platformData;
+	pmsM23State = sel & 0xFFU;
+}
+
+static uint32_t
+pmsQueryM23(uint32_t cpu, uint32_t platformData)
+{
+	(void)cpu;
+	(void)platformData;
+	return pmsM23State;
+}
 
 
 pmsDef pmsDefault[] = {
@@ -176,10 +304,23 @@ void pmsCPUConf(void) {
 	for(i = 0; i < pmsSetFuncMax; i++) pmsDfltFunc[i] = NULL;	/* Clear this */
 
 
-	ret = pmsBuild((pmsDef *)&pmsDefault, sizeof(pmsDefault), pmsDfltFunc, 0, (pmsQueryFunc_t)0);	/* Configure the default stepper */
-
-	if(ret != KERN_SUCCESS) {							/* Some screw up? */
-		panic("pmsCPUConf: initial stepper table build failed, ret = %08X\n", ret);	/* Squeal */
+	if ((memcmp(sysInfo, "PowerBook", 9) == 0) && (SYSINFO_U32(0x20) == 0x000000D2U)) {
+		pmsDfltFunc[1] = pmsSetPowerBook;
+		ret = pmsBuild((pmsDef *)&hwpmsStep, sizeof(hwpmsStep), pmsDfltFunc, 0, pmsQueryPowerBook);
+		if (ret != KERN_SUCCESS) {
+			panic("pmsCPUConf: hwpmsStep build failed, ret = %08X\n", ret);
+		}
+	} else if ((memcmp(sysInfo, "PowerMac8,2", 11) == 0) && (SYSINFO_U32(0x20) == 0x00000039U)) {
+		pmsDfltFunc[1] = pmsSetM23;
+		ret = pmsBuild((pmsDef *)&hwM23Step, sizeof(hwM23Step), pmsDfltFunc, 0, pmsQueryM23);
+		if (ret != KERN_SUCCESS) {
+			panic("pmsCPUConf: hwM23Step build failed, ret = %08X\n", ret);
+		}
+	} else {
+		ret = pmsBuild((pmsDef *)&pmsDefault, sizeof(pmsDefault), pmsDfltFunc, 0, (pmsQueryFunc_t)0);	/* Configure the default stepper */
+		if(ret != KERN_SUCCESS) {							/* Some screw up? */
+			panic("pmsCPUConf: initial stepper table build failed, ret = %08X\n", ret);	/* Squeal */
+		}
 	}
 	
 	pmsSetStep(pmsHigh, 1);								/* Slew to high speed */
