@@ -194,6 +194,8 @@ icmp_error(
 	struct icmp *icp;
 	struct mbuf *m;
 	unsigned icmplen;
+	unsigned max_icmplen;
+	unsigned space;
 
 #if ICMPPRINTFS
 	if (icmpprintfs)
@@ -217,12 +219,25 @@ icmp_error(
 	/* Don't send error in response to a multicast or broadcast packet */
 	if (n->m_flags & (M_BCAST|M_MCAST))
 		goto freeit;
+	icmplen = min(oiplen + 8, oip->ip_len);
+	if (icmplen < sizeof(struct ip)) {
+		printf("icmp_error: bad length\n");
+		goto freeit;
+	}
 	/*
-	 * First, formulate icmp message
+	 * First, formulate icmp message.  Allocate enough room for the
+	 * outer IP header, ICMP header, and copied payload before aligning.
 	 */
 	m = m_gethdr(M_DONTWAIT, MT_HEADER);	/* MAC-OK */
 	if (m == NULL)
 		goto freeit;
+	if (sizeof(struct ip) + ICMP_MINLEN + icmplen > MHLEN) {
+		MCLGET(m, M_DONTWAIT);
+		if ((m->m_flags & M_EXT) == 0) {
+			m_free(m);
+			goto freeit;
+		}
+	}
 
         if (n->m_flags & M_SKIP_FIREWALL) {
 		/* set M_SKIP_FIREWALL to skip firewall check, since we're called from firewall */
@@ -232,14 +247,12 @@ icmp_error(
 #if CONFIG_MACF_NET
 	mac_mbuf_label_associate_netlayer(n, m);
 #endif
-	icmplen = min(oiplen + 8, oip->ip_len);
-	if (icmplen < sizeof(struct ip)) {
-		printf("icmp_error: bad length\n");
-		m_free(m);
-		goto freeit;
-	}
+	space = M_TRAILINGSPACE(m);
+	max_icmplen = space - sizeof(struct ip) - ICMP_MINLEN;
+	if (icmplen > max_icmplen)
+		icmplen = max_icmplen;
 	m->m_len = icmplen + ICMP_MINLEN;
-	MH_ALIGN(m, m->m_len);
+	m->m_data += (space - m->m_len) &~ (sizeof(long) - 1);
 	icp = mtod(m, struct icmp *);
 	if ((u_int)type > ICMP_MAXTYPE)
 		panic("icmp_error");
@@ -276,7 +289,7 @@ icmp_error(
 	 * Now, copy old ip header (without options)
 	 * in front of icmp message.
 	 */
-	if (m->m_data - sizeof(struct ip) < m->m_pktdat)
+	if (M_LEADINGSPACE(m) < sizeof(struct ip))
 		panic("icmp len");
 	m->m_data -= sizeof(struct ip);
 	m->m_len += sizeof(struct ip);
