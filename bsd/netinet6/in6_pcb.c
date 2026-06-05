@@ -754,17 +754,23 @@ in6_pcbdetach(inp)
 		inp->inp_vflag = 0;
 		so->so_flags |= SOF_PCBCLEARING;
 		inp->inp_gencnt = ++ipi->ipi_gencnt;
-		if (inp->in6p_options)
+		if (inp->in6p_options) {
 			m_freem(inp->in6p_options);
+			inp->in6p_options = NULL;
+		}
  		ip6_freepcbopts(inp->in6p_outputopts);
+		inp->in6p_outputopts = NULL;
  		ip6_freemoptions(inp->in6p_moptions);
+		inp->in6p_moptions = NULL;
 		if (inp->in6p_route.ro_rt) {
 			rtfree(inp->in6p_route.ro_rt);
 			inp->in6p_route.ro_rt = NULL;
 		}
 		/* Check and free IPv4 related resources in case of mapped addr */
-		if (inp->inp_options)
+		if (inp->inp_options) {
 			(void)m_free(inp->inp_options);
+			inp->inp_options = NULL;
+		}
  		ip_freemoptions(inp->inp_moptions);
 		inp->inp_moptions = NULL;
 	
