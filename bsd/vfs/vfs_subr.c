@@ -5082,7 +5082,7 @@ vnode_authorize_delete(vauth_ctx vcp, boolean_t cached_delete_child)
 	 * this makes us check the directory each time, but it's unavoidable,
 	 * as sticky bit is an exception to caching.
 	 */
-	if (!cached_delete_child && (dvap->va_mode & S_ISTXT) && !vauth_file_owner(vcp) && !vauth_dir_owner(vcp)) {
+	if ((dvap->va_mode & S_ISTXT) && !vauth_file_owner(vcp) && !vauth_dir_owner(vcp)) {
 		KAUTH_DEBUG("%p    DENIED - sticky bit rules (user %d  file %d  dir %d)",
 		    vcp->vp, cred->cr_uid, vap->va_uid, dvap->va_uid);
 		return(EACCES);
