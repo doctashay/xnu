@@ -307,13 +307,8 @@ ptrace(struct proc *p, struct ptrace_args *uap, register_t *retval)
 		}
 
 		if (uap->addr != (user_addr_t)1) {
-#if defined(ppc)
-#define ALIGNED(addr,size)	(((unsigned)(addr)&((size)-1))==0)
-			if (!ALIGNED((int)uap->addr, sizeof(int)))
-				return (ERESTART);
-#undef 	ALIGNED
-#endif
-			thread_setentrypoint(th_act, uap->addr);
+			error = ENOTSUP;
+			goto out;
 		}
 
 		if ((unsigned)uap->data >= NSIG) {
