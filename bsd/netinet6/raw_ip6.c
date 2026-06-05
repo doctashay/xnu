@@ -330,6 +330,10 @@ rip6_output(
 	}
 
 	M_PREPEND(m, sizeof(*ip6), M_WAIT);
+	if (m == NULL) {
+		error = ENOBUFS;
+		goto bad;
+	}
 	ip6 = mtod(m, struct ip6_hdr *);
 
 	/*
@@ -575,7 +579,7 @@ rip6_attach(struct socket *so, int proto, __unused struct proc *p)
 		return error;
 	inp = (struct inpcb *)so->so_pcb;
 	inp->inp_vflag |= INP_IPV6;
-	inp->in6p_ip6_nxt = (long)proto;
+	inp->in6p_ip6_nxt = (char)proto;
 	inp->in6p_hops = -1;	/* use kernel default */
 	inp->in6p_cksum = -1;
 	MALLOC(inp->in6p_icmp6filt, struct icmp6_filter *,

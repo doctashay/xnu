@@ -1398,8 +1398,10 @@ ip6_ctloutput(so, sopt)
 				if (error != 0)
 					break;
 				error = soopt_mcopyin(sopt, m); /* XXX */
-				if (error != 0)
+				if (error != 0) {
+					m_freem(m);
 					break;
+				}
 				error = ip6_pcbopts(&in6p->in6p_outputopts,
 						    m, so, sopt);
 				m_freem(m); /* XXX */
@@ -1727,7 +1729,8 @@ do { \
 				if (error == 0)
 					error = sooptcopyout(sopt,
 						mtod(m, char *), m->m_len);
-				m_freem(m);
+				if (m != NULL)
+					m_freem(m);
 			    }
 				break;
 
@@ -1812,6 +1815,8 @@ ip6_pcbopts(
 		ip6_clearpktopts(opt, 1, -1);
 	} else
 		opt = _MALLOC(sizeof(*opt), M_IP6OPT, M_WAITOK);
+	if (opt == NULL)
+		return(ENOBUFS);
 	*pktopt = NULL;
 
 	if (!m || m->m_len == 0) {
@@ -2461,6 +2466,8 @@ ip6_setpktoptions(control, opt, priv, needcopy)
 				opt->ip6po_pktinfo =
 					_MALLOC(sizeof(struct in6_pktinfo),
 					       M_IP6OPT, M_WAITOK);
+				if (opt->ip6po_pktinfo == NULL)
+					return(ENOBUFS);
 				bcopy(CMSG_DATA(cm), opt->ip6po_pktinfo,
 				    sizeof(struct in6_pktinfo));
 			} else
@@ -2524,6 +2531,8 @@ ip6_setpktoptions(control, opt, priv, needcopy)
 				opt->ip6po_nexthop =
 					_MALLOC(*CMSG_DATA(cm),
 					       M_IP6OPT, M_WAITOK);
+				if (opt->ip6po_nexthop == NULL)
+					return(ENOBUFS);
 				bcopy(CMSG_DATA(cm),
 				      opt->ip6po_nexthop,
 				      *CMSG_DATA(cm));
@@ -2547,6 +2556,8 @@ ip6_setpktoptions(control, opt, priv, needcopy)
 			if (needcopy) {
 				opt->ip6po_hbh =
 					_MALLOC(hbhlen, M_IP6OPT, M_WAITOK);
+				if (opt->ip6po_hbh == NULL)
+					return(ENOBUFS);
 				bcopy(hbh, opt->ip6po_hbh, hbhlen);
 			} else
 				opt->ip6po_hbh = hbh;
@@ -2585,6 +2596,8 @@ ip6_setpktoptions(control, opt, priv, needcopy)
 
 			if (needcopy) {
 				*newdest = _MALLOC(destlen, M_IP6OPT, M_WAITOK);
+				if (*newdest == NULL)
+					return(ENOBUFS);
 				bcopy(dest, *newdest, destlen);
 			} else
 				*newdest = dest;
@@ -2622,6 +2635,8 @@ ip6_setpktoptions(control, opt, priv, needcopy)
 			if (needcopy) {
 				opt->ip6po_rthdr = _MALLOC(rthlen, M_IP6OPT,
 							  M_WAITOK);
+				if (opt->ip6po_rthdr == NULL)
+					return(ENOBUFS);
 				bcopy(rth, opt->ip6po_rthdr, rthlen);
 			} else
 				opt->ip6po_rthdr = rth;
